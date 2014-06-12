@@ -1,5 +1,5 @@
 #include "WProgram.h"
-#include <NewSoftSerial.h>
+#include <NewSoftSerial.h>#include <Time.h>
 #include <AF_XPort.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -9,63 +9,53 @@
 #include <string.h>
 #include <DHT.h>
 
-/* List Arduino PINs used */
+// Define some Constants... either using #define or Const if we need it
+//----------------------------------------------------------------------------//
+
+#ifdef DEBUG
+  #define DEBUG_PRINTLN(x) Serial.println(x)
+  #define DEBUG_PRINT(x) Serial.print(x)
+#else
+  #define DEBUG_PRINT(x)
+#endif
+
+//  Constants used for the LCD Screen: 20 rows
+const int LCD_WIDTH = 20
+
+// Constants used for the Arduino PINs
 #define PIN_WATER_LEVEL 0   /* Analog Pin 0 	*/
-#define TEMP_WIRE_BUS 	10  /* Digital Pin 10 */
+#define PIN_TEMP_WIRE_BUS 	10  /* Digital Pin 10 */
 #define PIN_BUCKPUCK_3  3   /* Digital Pin 3 */
 #define PIN_BUCKPUCK_9  9   /* Digital Pin 9 */
-#define TRIG_PIN        13  /* Water level, digital Pin 13 */
-#define ECHO_PIN        12  /* Water level, digital Pin 12 */
-#define DHTPIN          2   /* DHT, digital Pin 2 */
+#define PIN_TRIG        13  /* Water level, digital Pin 13 */
+#define PIN_ECHO        12  /* Water level, digital Pin 12 */
+#define PIN_DHT          2   /* DHT, digital Pin 2 */
+#define PIN_TX  		 5	/* RF433 Transmission to RaspberryPI central node */
 
+// Constants used for the DHT sensor
 #define DHTTYPE DHT11
+#define DHT_HUMI 0
+#define DHT_TEMP 1
 
-/* List of I2C addresses */
-const int I2C_clock_address  = 0x68;  /* I2C clock address */
-const int I2C_LCD_address    = 0x4C;  /* I2C LCD address */
-/* Not needed because it is already hard-coded in EEPROMI2C.h */
-//const int I2C_eeprom_address  = 0x50; /* I2C EEPROM address */
+
+// Constants used for the I2C bus
+//const int I2C_eeprom_address  = 0x50; /* I2C EEPROM address (EEPROMI2C.h) */
+const int I2C_clock_address  = 0x68;  	/* I2C clock address */
+const int I2C_LCD_address    = 0x4C;  	/* I2C LCD address */
+
 
 /* Channels used on the Chester's Garage board for LED */
-#define LED_WHITE  1
-#define LED_BLUE   3
+#define CHANNEL_LED_WHITE  1
+#define CHANNEL_LED_BLUE   3
+#define LED_WHITE  0 //used in arrays
+#define LED_BLUE   1 //used in arrays
+const int LED_ON 	= 250;
+const int LED_OFF 	= 0;
 
 /* Tank depth between the Sonar sensor and the bottom of the Tank */
 const float TANK_DEPTH	  = 90;
 /* Distance between the Sonar Sensor and the water */
 float cm = 0;
-
-// initial brightness of the LCD screen
-int BRIGHT = 128;
-int B = 0;
-int W = 0;
-
-/* Date/Time Globals */
-byte    Second; 	/* Store second value */
-byte    Minute; 	/* Store minute value */
-byte    Hour; 		/* Store hour value */
-byte    Day; 		/* Store day value */
-byte    Date; 		/* Store date value */
-byte    Month; 		/* Store month value */
-byte    Year; 		/* Store year value */
-int	MilTime; 	/* create military time output [0000,2400]*/
-int 	SaveMilTime = 0;
-int     InitLevel   = 0;
-
-/* Config variables - if EEPROM not initialized */
-int 	light_ON_MilTime  = 800;  /*Default value if conf file broken */
-int 	light_OFF_MilTime = 2000; /*Default value if conf file broken */
-int 	diming_MilTime    = 1900; /*Default value if conf file broken */
-int 	alarm_LIGHT       = 70;   /*Default value if conf file broken */
-int 	alarm_AQUA        = 30;   /*Default value if conf file broken */
-int     water_DELTA       = 40;   /*Default value if conf file broken */
-int 	need_ATO          = 0; 	  /*Default value if conf file broken */
-int 	temp_LIGHT	  = 1; 	  /*Default value if conf file broken */
-int 	temp_AQUA	  = 0; 	  /*Default value if conf file broken */
-int 	temp_3	          = 2; 	  /*Default value if conf file broken */
-
-/* Alarm status: 0 = none, 1 = light, 2 = aqua */
-byte 		alarm_STATUS      = 0;
 
 /* LCD Globals */
 /* Keypad layout */
@@ -80,67 +70,54 @@ byte 		alarm_STATUS      = 0;
  */
 const char keypad[17] = {
   -1,1,2,3,101,4,5,6,102,7,8,9,103,104,0,105,106};
-int 		keypad_delay 	= 15;
-LCDI2C	lcd = LCDI2C(4,20,I2C_LCD_address,1);
-#define lenght 20.0
 
-double percent=100.0;
+// Now, define all the global variables.
+//----------------------------------------------------------------------------//
 
-unsigned char b;
-unsigned int peace;
-byte p1[8] = {
-  0x10,
-  0x10,
-  0x10,
-  0x10,
-  0x10,
-  0x10,
-  0x10,
-  0x10};
+// This structure contains all the sensors data that would be sent over RF433 to the central node (RPi)
+// before it is pushed in the server DB
+struct sensordata {
+  int 	nodeID;
+  int 	date;
+  int 	time;
+  float temps[3];
+  float dht_vals[2];
+  long  waterLevel;
+  int	leds[2];
+};
+typedef struct sensordata SensorsData;
 
-byte p2[8] = {
-  0x18,
-  0x18,
-  0x18,
-  0x18,
-  0x18,
-  0x18,
-  0x18,
-  0x18};
+// initial brightness of the LCD screen
+int LCD_BRIGHTNESSNESS = 128;
 
-byte p3[8] = {
-  0x1C,
-  0x1C,
-  0x1C,
-  0x1C,
-  0x1C,
-  0x1C,
-  0x1C,
-  0x1C};
+/* Date/Time Globals */
+byte    Second; 	/* Store second value */
+byte    Minute; 	/* Store minute value */
+byte    Hour; 		/* Store hour value */
+byte    Day; 		/* Store day value */
+byte    Date; 		/* Store date value */
+byte    Month; 		/* Store month value */
+byte    Year; 		/* Store year value */
+int		MilTime; 	/* create military time output [0000,2400]*/
+int 	SaveMilTime = 0;
+int     InitLevel   = 0;
 
-byte p4[8] = {
-  0x1E,
-  0x1E,
-  0x1E,
-  0x1E,
-  0x1E,
-  0x1E,
-  0x1E,
-  0x1E};
+/* Config variables - if EEPROM not initialized */
+int 	light_ON_MilTime  = 800;  /*Default value if conf file broken */
+int 	light_OFF_MilTime = 2000; /*Default value if conf file broken */
+int 	diming_MilTime    = 1900; /*Default value if conf file broken */
+int 	alarm_LIGHT       = 70;   /*Default value if conf file broken */
+int 	alarm_AQUA        = 30;   /*Default value if conf file broken */
+int     water_DELTA       = 40;   /*Default value if conf file broken */
+int 	temp_LIGHT	  = 1; 	  /*Default value if conf file broken */
+int 	temp_AQUA	  = 0; 	  /*Default value if conf file broken */
+int 	temp_EXTRA	      = 2; 	  /*Default value if conf file broken */
 
-byte p5[8] = {
-  0x1F,
-  0x1F,
-  0x1F,
-  0x1F,
-  0x1F,
-  0x1F,
-  0x1F,
-  0x1F};
+/* Alarm status: 0 = none, 1 = light, 2 = aqua */
+byte 	alarm_STATUS      = 0;
 
-/* Config stored in EEPROM */
-struct config
-{
+/* Config stored in the EEPROM */
+struct config {
   int lightOn;
   int lightOff;
   int lightDimmer;
@@ -149,61 +126,73 @@ struct config
   int alarmAqua;
   int alarmLight;
   int levelWater;
-} 
-config;
+} config;
 
-/* DS18B20 Globals */
-OneWire tempWire(TEMP_WIRE_BUS);
-DallasTemperature temp_sensors(&tempWire);
 int ds18B20_count = 0; /* Number of DS sensors detected on the 1-wire bus */
+int loopNbr = 0; /* Tricks to have a more responsive keyboard since we do not use interrupts yet */
 
-float temps[3] 		= {
-  0.0, 0.0, 0.0};
 
-int loopNbr = 0; /* Tricks to have a more responsive keyboard */
-int white_ON = 250;
-int blue_ON = 250;
-int white_OFF = 0;
-int blue_OFF = 0;
-
-DHT dht(DHTPIN, DHTTYPE);
-float dht_vals[2] = { 0.0, 0.0 };
+DHT dht(PIN_DHT, DHTTYPE);
+OneWire tempWire(PIN_TEMP_WIRE_BUS);
+DallasTemperature temp_sensors(&tempWire);
+LCDI2C	lcd = LCDI2C(4,20,I2C_LCD_address,1);
+SensorsData data;
 
 void setup(void) {
+  
+  DEBUG_PRINTLN("Setup: ENTER");
+  setup_pins();
+  
+  Wire.begin(); /*initialize the I2C bus*/
+  delay(50);
+  Serial.begin(9600);
+  
+  delay(500);
+  setup_lcd();
+
+  delay(500);
+  dht.begin();
+ 
+  setup_sensors_data();
+  DEBUG_PRINTLN("Setup: EXIT");
+}
+
+void loop()
+{
+  // Handle keyboard interraction
+  process_keyboard();
+  
+  // Drive the light
+  setLight();
+  
+  // Process sensor data sometimes...
+  if (bcdToDec(Second) % 2 == 0)
+	  process_info();
+
+
+}
+
+void setup_pins() {
   TCCR1B = TCCR1B & 0b11111000 | 0x02;  // Sets the PWM freq to about 3900 Hz on pins 3 and 11
   TCCR2B = TCCR2B & 0b11111000 | 0x02;  // Sets the PWM freq to about 3900 Hz on pins 9 and 10
 
   /* pin modes */
-  pinMode(TRIG_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
+  pinMode(PIN_TRIG, OUTPUT);
+  pinMode(PIN_ECHO, INPUT);
   //pinMode(PIN_WATER_CFG, OUTPUT);
   pinMode(PIN_BUCKPUCK_3, OUTPUT);
   pinMode(PIN_BUCKPUCK_9,OUTPUT);
-  /* Initialization */
-  Wire.begin(); /*initialize the I2C bus*/
-  delay(50);
-  Serial.begin(9600);
+}
 
+void setup_lcd() {
   lcd.init();
-  lcd.set_backlight_brightness(BRIGHT);
-
-  lcd.load_custom_character(1,p1);
-  delay(50);
-  lcd.load_custom_character(2,p2);
-  delay(50);
-  lcd.load_custom_character(3,p3);
-  delay(50);
-  lcd.load_custom_character(4,p4);
-  delay(50);
-  lcd.load_custom_character(5,p5);
-  delay(50);
-
+  lcd.set_backlight_brightness(LCD_BRIGHTNESS);
   lcd.clear();
   lcd.print("Glowbot - Init...");
-  Serial.println("init");
+  DEBUG_PRINTLN("Init...");
   temp_sensors.begin(); 													/*Init temp sensors */
   ds18B20_count = temp_sensors.getDeviceCount();  /*Count sensors */
-  Serial.println(ds18B20_count);
+  DEBUG_PRINTLN(ds18B20_count);
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print("Glowbot - Init...");
@@ -215,16 +204,29 @@ void setup(void) {
   loadConfiguration();
   lcd.setCursor(3,0);
   lcd.print("Ready!");
-
-  delay(1000);
-  dht.begin();
-  
   lcd.clear();
-  Serial.println("Setup");
 }
 
-void loop()
-{
+void setup_sensors_data() {
+
+  int i = 0;
+  // Initialyzing all the sensor data, so at least if nothing works, we will get values
+  data.nodeID = 1; // ID used to recognyze which module sends the values to the central node
+  data.time = 0;
+  for (i=0;i<ds18B20_count; i++) {
+  	data.temps[i] = 0;
+  }
+  // Not beautiful but it works ... except if you have more than 2 colors LEDs
+  for (i=0;i<2; i++) {
+  	data.dht_vals[i] = 0.0;
+	data.leds[i] = 0.0;
+  }
+  data.waterLevel = 0.0;
+  // End of initialization
+}
+
+void process_keyboard() {
+
   int i = 0;
   int key;
   int set_time = 0;
@@ -245,12 +247,12 @@ void loop()
     lcd.off();
   }
   else if (mode == 3) {
-    BRIGHT += 10;
-    lcd.set_backlight_brightness(BRIGHT);
+    LCD_BRIGHTNESS += 10;
+    lcd.set_backlight_brightness(LCD_BRIGHTNESS);
   }
   else if (mode == 6) {
-    BRIGHT -= 10;
-    lcd.set_backlight_brightness(BRIGHT);
+    LCD_BRIGHTNESS -= 10;
+    lcd.set_backlight_brightness(LCD_BRIGHTNESS);
   } 
   else if (mode == 101) { /* A */
     lcd.clear();
@@ -321,7 +323,7 @@ void loop()
       lcd.print("Glowbot - Set Light");
       lcd.setCursor(1,0);
       lcd.print("Intensity: X");
-      //lcd.print(getLEDIntensity(LED_WHITE));
+      //lcd.print(getLEDIntensity(CHANNEL_LED_WHITE));
       i=0;
       while(not_set == 0) {
         lcd.blink_on();
@@ -336,7 +338,7 @@ void loop()
         if (key == 105) break; 	/* # */
         if (key == 104) { 	/* * */
           if (val != -1 && val <= 255) {
-            setLEDIntensity(LED_WHITE, val);
+            setLEDIntensity(CHANNEL_LED_WHITE, val);
             lcd.blink_off();
             not_set = 1;
             lcd.clear();
@@ -467,10 +469,10 @@ void loop()
           if (key == 105) break;
           if (key == 104) {
             if (val != -1) {
-              Serial.print("Modif config=");
-              Serial.print(conf_id);
-              Serial.print(" val=");
-              Serial.println(val);
+              DEBUG_PRINT("Modif config=");
+              DEBUG_PRINT(conf_id);
+              DEBUG_PRINT(" val=");
+              DEBUG_PRINTLN(val);
               switch(conf_id) {
               case 1:
                 config.lightOn = val;
@@ -514,7 +516,7 @@ void loop()
         if (conf_id == 8) {
           lcd.blink_off();
           lcd.clear();
-          Serial.println("Saving config");
+          DEBUG_PRINTLN("Saving config");
           eeWrite(0,config);
           delay(1000);
           loadConfiguration();
@@ -592,69 +594,59 @@ void loop()
     lcd.setCursor(0,0);
     lcd.print("Glowbot - NONE");
   }
-
-  /* Process sensor data */
-  process_info();
-
-
 }
-
 void process_info() {
 
-  if (loopNbr > 5) loopNbr = 0;
+  if (loopNbr > 6) loopNbr = 0;
 
-  /*Read date/time */
-  if (loopNbr == 1)
-    getTime();
 
   if (loopNbr == 0)
     /*Read Temperatures */
     getTemp();
-
-  //if ((SaveMilTime == 0 && InitLevel == 0) || (MilTime - SaveMilTime >= 10)) {
-    if (loopNbr == 4) {
-    /*Read water level */
-    Serial.print("Reading water level: ");
-    getWaterLevel();
-    SaveMilTime = MilTime;
-    Serial.println(MilTime);
-    InitLevel = 1;
-  }
+  
+  
+  /*Read date/time */
+  if (loopNbr == 1)
+    getTime();
 
   if (loopNbr == 2)
     getDHT();
-  
-  setLight();
 
   /*Display new values on the LCD screen*/
   if (loopNbr == 3)
     displayLCD();
-
-  loopNbr=loopNbr+1;
+  
+  if (loopNbr == 4) {
+    /*Read water level */
+    DEBUG_PRINT("Reading water level: ");
+    getWaterLevel();
+    SaveMilTime = MilTime;
+    DEBUG_PRINTLN(MilTime);
+    InitLevel = 1;
+  }
+  
+  if (loopNbr == 5)
+  	loopNbr=loopNbr+1;
+  
+  
 }
 
 void setLight() {
   int bou = light_OFF_MilTime - diming_MilTime;
   int cur;
   if ((MilTime >= light_ON_MilTime) && (MilTime < diming_MilTime)) {
-    setLEDIntensity(LED_BLUE, blue_OFF);
-    setLEDIntensity(LED_WHITE, white_ON);
-    W=1;
-    B=0;
+    setLEDIntensity(CHANNEL_LED_BLUE, LED_OFF);
+    setLEDIntensity(CHANNEL_LED_WHITE, LED_ON);
   } else {
     if ((MilTime >= diming_MilTime) && (MilTime < light_OFF_MilTime)) {
       float dimValue = (float)MilTime - (float)diming_MilTime;
-      cur = map(dimValue,0,bou,0,white_ON);
-      setLEDIntensity(LED_WHITE, cur);
-      setLEDIntensity(LED_BLUE,blue_ON - cur);
-      W=1;
-      B=1;
+      cur = map(dimValue,0,bou,0,LED_ON);
+      setLEDIntensity(CHANNEL_LED_WHITE, LED_ON - cur);
+      setLEDIntensity(CHANNEL_LED_BLUE,cur);
     } 
     else {
-      setLEDIntensity(LED_BLUE, blue_ON);
-      setLEDIntensity(LED_WHITE, 0);
-      W=0;
-      B=1;
+      setLEDIntensity(CHANNEL_LED_BLUE, LED_ON);
+      setLEDIntensity(CHANNEL_LED_WHITE, LED_OFF);
     }
   }
 }
@@ -665,12 +657,12 @@ void getDHT() {
     float t = dht.readTemperature();
     // check if returns are valid, if they are NaN (not a number) then something went wrong!
     if (isnan(t) || isnan(h)) {
-        Serial.println("Failed to read from DHT");
+        DEBUG_PRINTLN("Failed to read from DHT");
     } else {
-        dht_vals[0] = h;
-        dht_vals[1] = t;
-        Serial.print("DHT=");
-        Serial.println(h);
+        data.dht_vals[DHT_HUMI] = h;
+        data.dht_vals[DHT_TEMP] = t;
+        DEBUG_PRINT("DHT=");
+        DEBUG_PRINTLN(h);
     } 
 }
 
@@ -678,9 +670,9 @@ void getTemp() {
   int i=0;
   temp_sensors.requestTemperatures();
   while (i<ds18B20_count) {
-    temps[i] = temp_sensors.getTempCByIndex(i);
-    Serial.print("Temp=");
-    Serial.println(temps[i]);
+    data.temps[i] = temp_sensors.getTempCByIndex(i);
+    DEBUG_PRINT("Temp=");
+    DEBUG_PRINTLN(data.temps[i]);
     i++;
   }
 }
@@ -706,53 +698,50 @@ void displayLCD() {
 
   /* Display AQUA status */
   lcd.setCursor(1,0);
-  lcd.print("T1:");
+  lcd.print("T1=");
   if (alarm_STATUS & 1) {
     lcd.print(" !");
   } 
   else {
     lcd.print(" ");
   }
-  lcd.print(temps[temp_AQUA], 1);
+  lcd.print(data.temps[temp_AQUA], 1);
   lcd.print("oC");
   lcd.print(" LVL=");
-  lcd.print(need_ATO, DEC);
+  lcd.print(data.waterLevel, DEC);
   lcd.print("cm");
   
   /* Display LIGHT status */
   lcd.setCursor(2,0);
-  lcd.print("T2:");
+  lcd.print("T2=");
   if (alarm_STATUS & 2) {
     lcd.print("!");
   } 
   else {
     lcd.print(" ");
   }
-  lcd.print(temps[temp_LIGHT], 1);
+  lcd.print(data.temps[temp_LIGHT], 1);
   lcd.print("oC W=");
-  lcd.print(W,DEC);
+  lcd.print(data.leds[LED_WHITE],DEC);
   lcd.print(" B=");
-  lcd.print(B,DEC);
+  lcd.print(data.leds[LED_BLUE],DEC);
 
   /* Display LIGHT status */
   lcd.setCursor(3,0);
-  if (temps[temp_3] != 0.0) {
-    lcd.print("T3: ");
-    lcd.print(temps[temp_3], 1);
-    lcd.print("oC  oH=");
-    lcd.print(dht_vals[0], 1);
+  lcd.print("T3= ");
+  if (data.temps[temp_EXTRA] != 0.0) {   
+    lcd.print(data.temps[temp_EXTRA], 1);
   } else {
-    lcd.print("T3: ");
-    lcd.print(dht_vals[1], 1);
-    lcd.print("oC oH=");
-    lcd.print(dht_vals[0], 1);
+    lcd.print(data.dht_vals[DHT_TEMP], 1);
   }
+  lcd.print("oC  oH=");
+  lcd.print(data.dht_vals[DHT_HUMI], 1);
 
 }
 
 void clearlcd(int c) {
   //clearing line
-  for (int i =c;i<lenght;i++) {
+  for (int i =c;i<LCD_WIDTH;i++) {
     lcd.print(" ");
   }
 }
@@ -804,10 +793,12 @@ void getTime() {
   Year   = tempchar [6];
 
   MilTime = (bcdToDec(Hour) * 100) + bcdToDec(Minute);
+  data.time = MilTime;
+  data.date = (bcdToDec(Month) * 100) + bcdToDec(Day);
 }
 
 void setDefaultConfiguration() {
-  Serial.println("Setting default Configuration");
+  DEBUG_PRINTLN("Setting default Configuration");
   config.lightOn	= 800;
   config.lightOff 	= 2000;
   config.lightDimmer    = 1900;
@@ -822,11 +813,11 @@ void setDefaultConfiguration() {
 
 void loadConfiguration() {
   int val;
-  Serial.print("Loading configuration... ");
+  DEBUG_PRINT("Loading configuration... ");
   eeRead(0, config);
   delay(30);
   applyConfiguration();
-  Serial.println("Done");
+  DEBUG_PRINTLN("Done");
 }
 
 void applyConfiguration() {
@@ -845,46 +836,53 @@ void applyConfiguration() {
 void getWaterLevel() {
   
     long duration, distance;
-    digitalWrite(TRIG_PIN, LOW);  // Added this line
+    digitalWrite(PIN_TRIG, LOW);  // Added this line
     delayMicroseconds(2); // Added this line
-    digitalWrite(TRIG_PIN, HIGH);
+    digitalWrite(PIN_TRIG, HIGH);
     delayMicroseconds(10); // Added this line
-    digitalWrite(TRIG_PIN, LOW);
-    duration = pulseIn(ECHO_PIN, HIGH);
+    digitalWrite(PIN_TRIG, LOW);
+    duration = pulseIn(PIN_ECHO, HIGH);
     distance = (duration/2) / 29.1;
     if (distance >= 200 || distance <= 0){
-      need_ATO=0;
+      data.waterLevel=0;
     }
     else {
-      need_ATO=distance;
+      data.waterLevel=distance;
     }
-    Serial.print("need_ATO=");
-    Serial.println(need_ATO);
+    DEBUG_PRINT("Water level=");
+    DEBUG_PRINTLN(data.waterLevel);
 }
 
 void setLEDIntensity(int channel, int val) {
   int pin = PIN_BUCKPUCK_3;
   switch(channel) {
-  case LED_WHITE:
+  case CHANNEL_LED_WHITE:
     pin = PIN_BUCKPUCK_3;
-    /*Serial.print("setLED pin=");
-     Serial.print(pin);
-     Serial.print(" Val=");
-     Serial.println(val);
-     */
+    DEBUG_PRINT("setLED pin=");
+    DEBUG_PRINT(pin);
+    DEBUG_PRINT(" Val=");
+    DEBUG_PRINTLN(val);
+    
     analogWrite(pin,val);
+	data.leds[LED_WHITE] = val;
     break;
-  case LED_BLUE:
+  case CHANNEL_LED_BLUE:
     pin = PIN_BUCKPUCK_9;
-    /*
-    Serial.print("setLED pin=");
-     Serial.print(pin);
-     Serial.print(" Val=");
-     Serial.println(val);
-     */
+    
+    DEBUG_PRINT("setLED pin=");
+    DEBUG_PRINT(pin);
+    DEBUG_PRINT(" Val=");
+    DEBUG_PRINTLN(val);
+    
     analogWrite(pin,val);
+	data.leds[LED_BLUE] = val;
     break;
   }
+}
+
+void sendmsg_masternode() {
+	// Convert the struct to a string so it can easily be sent over RF
+	
 }
 
 
