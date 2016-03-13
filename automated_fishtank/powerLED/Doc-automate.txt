@@ -1,0 +1,11 @@
+Touches:
+#=Valider
+*=Suivant
+1=LCD ON
+2=LCD OFF
+3=LCD +
+6=LCD -
+A=Config Date, Lumiere
+B=Config Parametres
+C=Logs
+D=Libre
