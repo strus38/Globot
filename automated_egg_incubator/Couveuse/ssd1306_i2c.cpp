@@ -254,6 +254,7 @@ void SSD1306::sendInitCommands(void)
 }
 
 void SSD1306::nextFrameTick() {
+  
   myFrameTick++;
   if (myFrameTick == myFrameWaitTicks && myFrameState == 0 || myFrameTick == myFrameTransitionTicks && myFrameState == 1) {
     myFrameState = (myFrameState + 1) %  2;
@@ -263,7 +264,7 @@ void SSD1306::nextFrameTick() {
     myFrameTick = 0;
   }
   drawIndicators(myFrameCount, myCurrentFrame);
-
+  myFrameState = 0;
   switch (myFrameState) {
     case 0:
       (*myFrameCallbacks[myCurrentFrame])(0, 0);

@@ -8,70 +8,58 @@
 // - DHT Lib: https://github.com/markruys/arduino-DHT
 // - 1-Wire: http://forum.pjrc.com/threads/23939-Strange-behavior-on-the-Onewireslave-library?p=33608&viewfull=1#post33608
 // - 1-Wire: https://github.com/PaulStoffregen/OneWire
-// - DallasTemperature: https://github.com/milesburton/Arduino-Temperature-Control-Library
+// - PID: https://github.com/milesburton/Arduino-Temperature-Control-Library
 // - PID: http://playground.arduino.cc/Code/PIDLibraryRelayOutputExample
 // - RELAY: https://github.com/John-NY/Arduino_Oven_Controller_PID/blob/master/tc_relay_control.pde
-// - TIMER: http://www.doctormonk.com/2012/01/arduino-timer-library.html
+// - 
 //
-//#include <SPI.h>
+
 #include <Wire.h>
-#include <DHT.h>
+//#include <DHT.h>
+#include <dht_nonblocking.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+
 
 #define DEVMODE 0
 #define OLEDMODE 1
 
-#if defined(OLEDMODE)
-//#include <Adafruit_GFX.h>
-//#include <Adafruit_SSD1306.h>
-#include "ssd1306_i2c.h"
-#include "font.h"
-#include "Couveuse.h"
+#ifndef F_CPU
+    #define F_CPU 11059200UL // 16 MHz clock speed
+#endif
 
-#define SDA 4
-#define SCL 5
-#define I2C 0x3C
-SSD1306 display(I2C, SDA, SCL);
-// this array keeps function pointers to all frames
-// frames are the single views that slide from right to left
-void drawFrame1(int x, int y);
-void (*frameCallbacks[1])(int x, int y) = {drawFrame1};
-// how many frames are there?
-int frameCount = 1;
-// on frame is currently displayed
-int currentFrame = 0;
+#if defined(OLEDMODE)
+    #include "ssd1306_i2c.h"
+    #include "font.h"
+    #include "Couveuse.h"
+
+    #define SDA 4
+    #define SCL 5
+    #define I2C 0x3C
+    SSD1306 display(I2C, SDA, SCL);
+    // this array keeps function pointers to all frames
+    // frames are the single views that slide from right to left
+    void drawFrame1(int x, int y);
+    void (*frameCallbacks[1])(int x, int y) = {drawFrame1};
+    // how many frames are there?
+    int frameCount = 1;
+    // one frame is currently displayed
+    int currentFrame = 0;
 #endif
 
 #define DS18B20_PIN_1       8  // 1-wire bus
 #define DHT11_PIN           10 // DHT sensor
 #define PID_RELAY_PIN       7 // Channel 2
-#define ROLLER_RELAY_PIN    6 // Channel 1                                                                                                                   6 // Channel 1
+#define ROLLER_RELAY_PIN    6 // Channel 1
 #define PushPin   2 // Button
 #define PotPin    A0 // Potentiometer
 
-DHT dht;
+#define DHT_SENSOR_TYPE DHT_TYPE_11
+DHT_nonblocking dht_sensor( DHT11_PIN, DHT_SENSOR_TYPE );
+//DHT dht;
 OneWire  oneWire(DS18B20_PIN_1);
 DallasTemperature sensors(&oneWire);
 DeviceAddress insideThermometer;
-
-//#if defined(OLEDMODE)
-// ************************************************
-// Screen init
-// ************************************************
-//#define OLED_RESET 4
-//Adafruit_SSD1306 oled(OLED_RESET);
-
-//#define NUMFLAKES 10
-//#define XPOS 0
-//#define YPOS 1
-//#define DELTAY 2
-
-//#if (SSD1306_LCDHEIGHT != 64)
-//#error("Height incorrect, please fix Adafruit_SSD1306.h!");
-//#endif
-
-//#endif
 
 int SetPoint = 3780;       // 37.8 degree as target temp by default
 int RollTime = 9000;       // 8 seconds
@@ -83,25 +71,34 @@ boolean TimerOn = false;
 boolean change = false;
 
 volatile long onTime = 0;
-short int i = 0;
+//short int i = 0;
 
 enum operatingState { OFF = 0, SETT, SETR, RUN };
 operatingState opState = OFF;
 
 // Button handling
-int buttonState;
-int lastButtonState = HIGH;
-unsigned long lastButtonTime = 0;
-unsigned long longPressTime = 500;
-boolean shortButtonPressed = false;
+long buttonTimer = 0;
+long longPressTime = 800;
+int buttonState;             // the current reading from the input pin
+int lastButtonState = LOW;   // the previous reading from the input pin
+
+// the following variables are long's because the time, measured in miliseconds,
+// will quickly become a bigger number than can be stored in an int.
+long lastDebounceTime = 0;  // the last time the output pin was toggled
+long debounceDelay = 50;    // the debounce time; increase if the output flickers
+
+
+boolean buttonActive = false;
 boolean longButtonPressed = false;
+boolean shortButtonPressed = false;
 
 int lastRelayState = LOW;
 float Temp=-1;
-float Hum=-1;
-int c = 0;
+float Humidity =-1;
+short int c = 0;
+int led=LOW;
 
-#define DAYS 1814400000
+#define DAYS 1814400000 // 21 days
 
 void setup()
 {
@@ -109,8 +106,9 @@ void setup()
   digitalWrite(PID_RELAY_PIN, LOW);
   digitalWrite(ROLLER_RELAY_PIN, LOW);
 
-
-  //Serial.begin(9600);
+#if defined(DEVMODE)
+  Serial.begin(9600);
+#endif
 
   pinMode(PushPin, INPUT_PULLUP);
 
@@ -128,11 +126,14 @@ void setup()
   delay(500);
 #endif
 
-  dht.setup(DHT11_PIN);
-
-  sensors.begin();
-  c = sensors.getDeviceCount();
+  // Init the DHT sensor
+  //dht.setup(DHT11_PIN);
   
+  // Init the DS18B20 sensors
+  sensors.begin();
+  // Count the sensors (2 in the design currently since the Temp of the DHT11 is ignored)
+  c = sensors.getDeviceCount();
+
 #if defined(DEVMODE)
   Serial.print(c, DEC);
   Serial.println(F(" devices."));
@@ -143,41 +144,48 @@ void setup()
     Serial.println(F("Unable to find address for Device 0"));
 #endif
   }
-  sensors.setResolution(insideThermometer, 12);
+  sensors.setResolution(insideThermometer, 11);
 
   if (!sensors.getAddress(insideThermometer, 1)) {
 #if defined(DEVMODE)
     Serial.println(F("Unable to find address for Device 1"));
 #endif
   }
-  sensors.setResolution(insideThermometer, 12);
+  sensors.setResolution(insideThermometer, 11);
 
+  // Configure the Relays
   pinMode(PID_RELAY_PIN, OUTPUT);
   pinMode(ROLLER_RELAY_PIN, OUTPUT);
 
-  // Initialize the PID and related variables
-  // LoadParameters();
-  // Initialize LCD Display
-#if defined(DEVMODE)
-  Serial.print(F("Loading SetPoint: "));
-  Serial.print(SetPoint);
-  Serial.print(F(" RollTime: "));
-  Serial.print(RollTime);
-  Serial.println(F(" ... READY"));
-#endif
+  cli();
+
+  TCCR1A = 0;// set entire TCCR2A register to 0
+  TCCR1B = 0;// same for TCCR2B
+  TCNT1  = 0;//initialize counter value to 0
+  // set compare match register for 8khz increments
+  OCR1A = 15624;// = (16*10^6) / (2000*64) - 1 (must be <256)
+  // turn on CTC mode
+  TCCR1B |= (1 << WGM12);
+  // Set CS21 bit for 8 prescaler
+  TCCR1B |= (1 << CS12) | (1 << CS10);
+  // enable timer compare interrupt
+  TIMSK1 |= (1 << OCIE1A);
+
+  sei();
 
   // Run Timer2 interrupt every 15 ms
-  TCCR2A = 0;
-  TCCR2B = 1 << CS22 | 1 << CS21 | 1 << CS20;
+  // TCCR2A = 0;
+  // TCCR2B = 1 << CS22 | 1 << CS21 | 1 << CS20;
 
   // Timer2 Overflow Interrupt Enable
-  TIMSK2 |= 1 << TOIE2;
+  // TIMSK2 |= 1 << TOIE2;
 }
 
-// ************************************************
-// Timer Interrupt Handler
-// ************************************************
-SIGNAL(TIMER2_OVF_vect)
+// ********************************************************************
+// Timer Interrupt Handler - keep it short, should be less than 15ms!
+// ********************************************************************
+ISR(TIMER1_COMPA_vect)
+//SIGNAL(TIMER2_OVF_vect)
 {
   if (opState == OFF)
   {
@@ -193,11 +201,6 @@ SIGNAL(TIMER2_OVF_vect)
 
 void loop()
 {
-#if defined(OLEDMODE)
-  display.clear();
-  display.nextFrameTick();
-  display.display();
-#endif
   resetbutton();
 
   switch (opState)
@@ -215,28 +218,42 @@ void loop()
       Run();
       break;
   }
+  
 }
 
 // capture button presses
 void button() {
-  buttonState = digitalRead(PushPin);
-  if (buttonState != lastButtonState) {
-    if (buttonState == HIGH) {
-      if (millis() - lastButtonTime < longPressTime) {
-        shortButtonPressed = true;
-      }
-      else {
-        longButtonPressed = true;
+
+  int reading = digitalRead(PushPin);
+  if (reading != lastButtonState) {
+    // reset the debouncing timer
+    lastDebounceTime = millis();
+  }
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    // whatever the reading is at, it's been there for longer
+    // than the debounce delay, so take it as the actual current state:
+
+    // if the button state has changed:
+    if (reading != buttonState) {
+      buttonState = reading;
+
+      // only toggle the LED if the new button state is HIGH
+      if (buttonState == HIGH) {
+        buttonTimer = millis();
+      } else {
+        if ((millis() - buttonTimer > longPressTime) && (longButtonPressed == false))
+          longButtonPressed = true;
+        else if ((millis() - buttonTimer) < longPressTime)
+          shortButtonPressed = true;
       }
     }
-    lastButtonState = buttonState;
-    lastButtonTime = millis();
   }
+  lastButtonState = reading;
 }
 
 void resetbutton() {
-  shortButtonPressed = false;
   longButtonPressed = false;
+  shortButtonPressed = false;
 }
 
 void drawFrame1(int x, int y) {
@@ -244,7 +261,7 @@ void drawFrame1(int x, int y) {
   display.drawString(1 + x, 1 + y, String(c));
   if (lastRelayState == HIGH)
     display.drawString(22 + x, 1 + y, F("HEAT"));
-  
+
   switch (opState)
   {
     case OFF:
@@ -261,8 +278,8 @@ void drawFrame1(int x, int y) {
       break;
   }
   if (TimerOn)
-    display.drawString(100 + x, 1 + y, F("ON"));
-    
+    display.drawString(100 + x, 1 + y, F("Roll"));
+
   display.drawXbm(x + 7, y + 7, temperature_width, temperature_height, temperature_bits);
   display.setFontScale2x2(true);
   if (Temp == -1)
@@ -271,11 +288,11 @@ void drawFrame1(int x, int y) {
     display.drawString(34 + x, 20 + y, String(Temp) + "C");
 
   display.setFontScale2x2(false);
-  if (Hum ==-1)
+  if (Humidity ==-1)
     display.drawString(44 + x, 40 + y, "Error");
   else
-    display.drawString(44 + x, 40 + y, String(Hum) + "H");
-  
+    display.drawString(44 + x, 40 + y, String(Humidity) + "H");
+
   display.drawString(1 + x, 56 + y, String((DAYS - millis())/(24 * 3600000)) + "j");
 }
 
@@ -287,6 +304,8 @@ void Off()
 {
   digitalWrite(PID_RELAY_PIN, LOW);  // make sure it is off
   digitalWrite(ROLLER_RELAY_PIN, LOW);  // make sure relay is off
+  lastRelayState = LOW;
+  
   // Print status: OFF
 #if defined(DEVMODE)
   Serial.println(F("Turning system OFF"));
@@ -294,13 +313,9 @@ void Off()
 
   while (!(shortButtonPressed || longButtonPressed))
   {
-    Temp = getTemperature();
-    Hum = getHumidity();
     // Display Temp... and other info if needed
-    display.clear();
-    display.nextFrameTick();
-    display.display();
-  
+    DoControl();
+    
     button();
   }
   StartTime = millis();
@@ -309,6 +324,7 @@ void Off()
 
 void SetT()
 {
+  /*
 #if defined(DEVMODE)
   // Display: Set Temperature
   Serial.println(F("Setting Temperature"));
@@ -341,10 +357,12 @@ void SetT()
     }
     // Print SetPoint
   }
+  */
 }
 
 void SetR()
 {
+  /*
 #if defined(DEVMODE)
   // Display: Set Roll time
   Serial.println(F("Set Rolling time"));
@@ -378,6 +396,7 @@ void SetR()
     }
     // Print SetPoint
   }
+  */
 }
 
 // ************************************************
@@ -393,20 +412,19 @@ void Run()
   while (true)
   {
     button();
-    if (shortButtonPressed)
-    {
-      opState = SETT;
-      return;
-    }
     if (longButtonPressed)
     {
       opState = OFF;
+      TimerOn = false;
       return;
     }
-
-    display.clear();
-    display.nextFrameTick();
-    display.display();
+    if (shortButtonPressed)
+    {
+      TimerOn = !TimerOn;
+      StartTime = millis();
+      opState = RUN;
+      return;
+    }
 
     DoControl();
 
@@ -435,21 +453,34 @@ void Run()
       digitalWrite(ROLLER_RELAY_PIN, LOW);
     }
 
-    delay(100);
+    delay(15);
   }
 }
 
 void DoControl()
 {
   // Read the input:
-  Hum = getHumidity();
-  Temp = getTemperature();
+  //Hum = getHumidity();
+  float temperature;
+  if( measure_environment( &temperature, &Humidity ) == true ) {
+    delay(50);
+    temperature = getTemperature();
+    if (temperature ==127) 
+      Temp = -1;
+    else 
+      Temp = temperature;
+  }
+  if (Temp != -1)
+    onTime = SetPoint - (Temp * 100);
 
-  // Time Proportional relay state is updated regularly via Timer interrupt.
-  onTime = SetPoint - (Temp * 100);
+#if defined(OLEDMODE)
+  display.clear();
+  display.nextFrameTick();
+  display.display();
+#endif
 #if defined(DEVMODE)
   Serial.print(F("Hum: "));
-  Serial.print(Hum);
+  Serial.print(Humidity);
   Serial.print(F(" Temp: "));
   Serial.print(Temp);
   Serial.print(F(" onTime: "));
@@ -462,48 +493,50 @@ void DoControl()
 float getTemperature()
 {
   sensors.requestTemperatures();
+  delay(50);
   float tempC1 = sensors.getTempCByIndex(0);
   float tempC2 = sensors.getTempCByIndex(1);
-  if (tempC1 < 0) tempC1 = tempC2;
-  if (tempC2 < 0) tempC2 = tempC1;
+  
+  if (abs(tempC1) == 127)
+      if (abs(tempC2) != 127)
+        return tempC2;
+  if (abs(tempC2) == 127)
+      if (abs(tempC1) != 127)
+        return tempC1;
   
   return abs((tempC1 + tempC2) / 2);
 }
 
-float getHumidity()
-{
-  delay(dht.getMinimumSamplingPeriod());
-  float humidity = dht.getHumidity();
-  float temperature = dht.getTemperature();
-  if (humidity <= 0)
-    return -1;
-  return humidity;
-}
-
-
 void DriveOutput()
 {
+  led = !led;
+  digitalWrite(13,led);
+
   if (onTime > 20)
   {
-    if (lastRelayState == LOW) {
-      i++;
-      if (i < 20)
-        return;
-    }
-    i = 0;
     lastRelayState = HIGH;
     digitalWrite(PID_RELAY_PIN, HIGH);
   }
   else
   {
-    if (lastRelayState == HIGH) {
-      i++;
-      if (i < 20)
-        return;
-    }
-    i = 0;
     lastRelayState = LOW;
     digitalWrite(PID_RELAY_PIN, LOW);
   }
 }
 
+static bool measure_environment( float *temperature, float *humidity )
+{
+  static unsigned long measurement_timestamp = millis( );
+
+  /* Measure once every four seconds. */
+  if( millis( ) - measurement_timestamp > 1500ul )
+  {
+    if( dht_sensor.measure( temperature, humidity ) == true )
+    {
+      measurement_timestamp = millis( );
+      return( true );
+    }
+  }
+
+  return( false );
+}
