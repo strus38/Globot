@@ -20,12 +20,12 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-
+#ifndef DEVMODE
 #define DEVMODE 0
-#define OLEDMODE 1
+#endif
 
-#ifndef F_CPU
-    #define F_CPU 11059200UL // 16 MHz clock speed
+#ifndef OLEDMODE
+#define OLEDMODE 1
 #endif
 
 #if defined(OLEDMODE)
@@ -63,7 +63,7 @@ DeviceAddress insideThermometer;
 
 int SetPoint = 3780;       // 37.8 degree as target temp by default
 int RollTime = 9000;       // 8 seconds
-const int RollEvery = 180; // turn every 3 hours
+const int RollEvery = 5;    //180; // turn every 3 hours
 
 double Minutes;
 unsigned long StartTime;
@@ -71,9 +71,9 @@ boolean TimerOn = false;
 boolean change = false;
 
 volatile long onTime = 0;
-//short int i = 0;
+unsigned long Now;
 
-enum operatingState { OFF = 0, SETT, SETR, RUN };
+enum operatingState { OFF = 0, RUN };
 operatingState opState = OFF;
 
 // Button handling
@@ -185,7 +185,6 @@ void setup()
 // Timer Interrupt Handler - keep it short, should be less than 15ms!
 // ********************************************************************
 ISR(TIMER1_COMPA_vect)
-//SIGNAL(TIMER2_OVF_vect)
 {
   if (opState == OFF)
   {
@@ -207,12 +206,6 @@ void loop()
   {
     case OFF:
       Off();
-      break;
-    case SETT:
-      SetT();
-      break;
-    case SETR:
-      SetR();
       break;
     case RUN:
       Run();
@@ -267,33 +260,30 @@ void drawFrame1(int x, int y) {
     case OFF:
       display.drawString(55 + x, 8 + y, F("OFF"));
       break;
-    case SETT:
-      display.drawString(55 + x, 8 + y, F("SETT Mode"));
-      break;
-    case SETR:
-      display.drawString(55 + x, 8 + y, F("SETR Mode"));
-      break;
     case RUN:
       display.drawString(55 + x, 8 + y, F("RUN Mode"));
       break;
   }
   if (TimerOn)
     display.drawString(100 + x, 1 + y, F("Roll"));
+  else {
+    display.drawString(100 + x, 1 + y, String(RollEvery - ((Now - StartTime) / 60000)));
+  }
 
   display.drawXbm(x + 7, y + 7, temperature_width, temperature_height, temperature_bits);
   display.setFontScale2x2(true);
   if (Temp == -1)
-    display.drawString(34 + x, 20 + y, "Error");
+    display.drawString(34 + x, 20 + y, F("Error"));
   else
     display.drawString(34 + x, 20 + y, String(Temp) + "C");
 
   display.setFontScale2x2(false);
   if (Humidity ==-1)
-    display.drawString(44 + x, 40 + y, "Error");
+    display.drawString(44 + x, 40 + y, F("Error"));
   else
     display.drawString(44 + x, 40 + y, String(Humidity) + "H");
 
-  display.drawString(1 + x, 56 + y, String((DAYS - millis())/(24 * 3600000)) + "j");
+  display.drawString(1 + x, 56 + y, String((DAYS - Now)/(24 * 3600000)) + "j");
 }
 
 
@@ -306,13 +296,13 @@ void Off()
   digitalWrite(ROLLER_RELAY_PIN, LOW);  // make sure relay is off
   lastRelayState = LOW;
   
-  // Print status: OFF
 #if defined(DEVMODE)
   Serial.println(F("Turning system OFF"));
 #endif
 
   while (!(shortButtonPressed || longButtonPressed))
   {
+    Now = millis();
     // Display Temp... and other info if needed
     DoControl();
     
@@ -320,83 +310,6 @@ void Off()
   }
   StartTime = millis();
   opState = RUN; // start control
-}
-
-void SetT()
-{
-  /*
-#if defined(DEVMODE)
-  // Display: Set Temperature
-  Serial.println(F("Setting Temperature"));
-#endif
-
-  while (true)
-  {
-    button();
-    if (change) {
-      SetPoint = map(analogRead(PotPin), 0, 1023, 15, 99);
-      // Print #
-    };
-    if (longButtonPressed)
-    {
-      change = !change;
-      return;
-    }
-    if (shortButtonPressed)
-    {
-      opState = SETR;
-      change = false;
-      return;
-    }
-
-    if (!change & (millis() - lastButtonTime) > 3000)  // return to RUN after 3 seconds idle
-    {
-      opState = RUN;
-      change = false;
-      return;
-    }
-    // Print SetPoint
-  }
-  */
-}
-
-void SetR()
-{
-  /*
-#if defined(DEVMODE)
-  // Display: Set Roll time
-  Serial.println(F("Set Rolling time"));
-#else
-
-#endif
-  while (true)
-  {
-    button();
-    if (change) {
-      RollTime = map(analogRead(PotPin), 0, 1023, 15, 99);
-      // Print #
-    };
-    if (longButtonPressed)
-    {
-      change = !change;
-      return;
-    }
-    if (shortButtonPressed)
-    {
-      opState = RUN;
-      change = false;
-      return;
-    }
-
-    if (!change & (millis() - lastButtonTime) > 3000)  // return to RUN after 3 seconds idle
-    {
-      opState = RUN;
-      change = false;
-      return;
-    }
-    // Print SetPoint
-  }
-  */
 }
 
 // ************************************************
@@ -426,12 +339,13 @@ void Run()
       return;
     }
 
+    Now = millis();
     DoControl();
 
-    if ((millis() - StartTime) / 60000 >= RollEvery) {
+    if ((Now - StartTime) / 60000 >= RollEvery) {
       TimerOn = true;
       if (TimerOn) {
-        StartTime = millis();
+        StartTime = Now;
       }
 #if defined(DEVMODE)
       Serial.println(F("Timer started"));
@@ -440,7 +354,7 @@ void Run()
     if (TimerOn) {
 
       digitalWrite(ROLLER_RELAY_PIN, HIGH);
-      if ((millis() - StartTime) >= RollTime)
+      if ((Now - StartTime) >= RollTime)
       {
 #if defined(DEVMODE)
         Serial.println(F("Timer stopped"));
@@ -453,17 +367,14 @@ void Run()
       digitalWrite(ROLLER_RELAY_PIN, LOW);
     }
 
-    delay(15);
+    //delay(15);
   }
 }
 
 void DoControl()
 {
-  // Read the input:
-  //Hum = getHumidity();
   float temperature;
   if( measure_environment( &temperature, &Humidity ) == true ) {
-    delay(50);
     temperature = getTemperature();
     if (temperature ==127) 
       Temp = -1;
@@ -493,7 +404,6 @@ void DoControl()
 float getTemperature()
 {
   sensors.requestTemperatures();
-  delay(50);
   float tempC1 = sensors.getTempCByIndex(0);
   float tempC2 = sensors.getTempCByIndex(1);
   
@@ -529,7 +439,7 @@ static bool measure_environment( float *temperature, float *humidity )
   static unsigned long measurement_timestamp = millis( );
 
   /* Measure once every four seconds. */
-  if( millis( ) - measurement_timestamp > 1500ul )
+  if( millis( ) - measurement_timestamp > 1400ul )
   {
     if( dht_sensor.measure( temperature, humidity ) == true )
     {
