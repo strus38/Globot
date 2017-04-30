@@ -19,8 +19,8 @@ The goal is to enhance 2016 version with the follozing setup:
 
 ### Build
 
-![View1](./Couveuse_ - 1.jpg)
+![View1](https://github.com/strus38/Globot/blob/master/automated_egg_incubator_V2/Couveuse_%20-%201.jpg)
 
-![View2](./Couveuse_ - 2.jpg)
+![View2](https://github.com/strus38/Globot/blob/master/automated_egg_incubator_V2/Couveuse_%20-%202.jpg)
 
-![View3](./Couveuse_ - 3.jpg)
+![View3](https://github.com/strus38/Globot/blob/master/automated_egg_incubator_V2/Couveuse_%20-%203.jpg)
