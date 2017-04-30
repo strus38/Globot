@@ -2,7 +2,8 @@
 
 ## Overview
 
-The chicken eggs will be put to the incubator on 01/05/2017 (thus, no time for PID algo...)
+The chicken eggs will be put in the incubator on 01/05/2017 (thus, no time for PID algo...).
+
 The goal is to enhance the 2016 version with the following setup:
 
 ### Hardware
@@ -13,7 +14,7 @@ The goal is to enhance the 2016 version with the following setup:
 - Relay SSR x 2 (silence is king)
 - Fan
 - Microwave motor
-- New egg balance
+- New egg roll system
 
 ### Software
 - PID controller -> Pending
