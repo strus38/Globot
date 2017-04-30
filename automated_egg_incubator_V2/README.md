@@ -2,7 +2,8 @@
 
 ## Overview
 
-The goal is to enhance 2016 version with the follozing setup:
+The goal is to enhance the 2016 version with the following setup:
+The eggs will be put to hatch on 01/05/2017 (thus, no time for PID algo...)
 
 ### Hardware
 - Arduino Mega
@@ -12,9 +13,10 @@ The goal is to enhance 2016 version with the follozing setup:
 - Relay SSR x 2 (silence is king)
 - Fan
 - Microwave motor
+- New egg balance
 
 ### Software
-- PID controller
+- PID controller -> Pending
 - OLED driver
 
 ### Build
