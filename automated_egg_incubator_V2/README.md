@@ -27,3 +27,5 @@ The goal is to enhance the 2016 version with the following setup:
 ![View2](https://github.com/strus38/Globot/blob/master/automated_egg_incubator_V2/Couveuse_%20-%202.jpg)
 
 ![View3](https://github.com/strus38/Globot/blob/master/automated_egg_incubator_V2/Couveuse_%20-%203.jpg)
+
+![View4](https://github.com/strus38/Globot/blob/master/automated_egg_incubator_V2/Couveuse_%20-%204.jpg)
