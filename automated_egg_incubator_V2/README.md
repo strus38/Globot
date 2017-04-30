@@ -2,8 +2,8 @@
 
 ## Overview
 
+The chicken eggs will be put to the incubator on 01/05/2017 (thus, no time for PID algo...)
 The goal is to enhance the 2016 version with the following setup:
-The eggs will be put to hatch on 01/05/2017 (thus, no time for PID algo...)
 
 ### Hardware
 - Arduino Mega
