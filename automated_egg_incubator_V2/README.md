@@ -2,7 +2,7 @@
 
 ## Overview
 
-The chicken eggs will be put in the incubator on 01/05/2017 (thus, no time for PID algo...).
+The chicken eggs put (9 Grise du Vercors) in the incubator on 03/05/2017 (thus, no time for PID algo...).
 
 The goal is to enhance the 2016 version with the following setup:
 
