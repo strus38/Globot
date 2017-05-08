@@ -21,6 +21,9 @@ The goal is to enhance the 2016 version with the following setup:
 - OLED driver
 
 ### Build
+New Raspberry Pi camera with motioneye to share with some kids in the neighborhood... so when ready the hatch will be available to all.
+
+![View1](https://github.com/strus38/Globot/blob/master/automated_egg_incubator_V2/Capture%20d%E2%80%99e%CC%81cran%202017-05-08%20a%CC%80%2017.31.56.png)
 
 ![View1](https://github.com/strus38/Globot/blob/master/automated_egg_incubator_V2/Couveuse_%20-%201.jpg)
 
