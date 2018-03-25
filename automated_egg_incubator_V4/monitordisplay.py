@@ -98,9 +98,9 @@ def main():
 
             draw.text((x, top + 2), str(date), font=font, fill=255)
             draw.text((x, top + 12), "IP: " + str(IP), font=font, fill=255)
-            draw.text((x, top + 22), "T: " + str(T), font=font, fill=255)
-            draw.text((x, top + 32), "H: " + str(H), font=font, fill=255)
-            draw.text((x, top + 42), "Days before birth: " + str(LEFT), font=font, fill=255)
+            draw.text((x, top + 22), "Temp °C: " + str(T), font=font, fill=255)
+            draw.text((x, top + 32), "Hum %: " + str(H), font=font, fill=255)
+            draw.text((x, top + 42), "Birth in "+str(LEFT)+" days", font=font, fill=255)
         except Exception as e:
             pass
 
