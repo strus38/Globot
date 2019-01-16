@@ -1,3 +1,4 @@
+#include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Wire.h>
 
@@ -41,13 +42,14 @@ DeviceAddress insideThermometer;
 
 const int TargetTemperature = 2500;       // 25.0 degree as target temp by default
 
-volatile long t_onTime = 0;
 unsigned long t_now;
 bool          b_heat_relaystate = RELAY_OFF;
 short int     si_nb_sensors = 0;
 float         f_temp=-1;
+float         f_temp2=-1;
 float         f_humi =-1;
 int           i_led=LOW;
+int           i_diff = 0;
 
 void setup()
 {
@@ -73,7 +75,7 @@ void setup()
 
   // Init the DS18B20 sensors
   sensors.begin();
-  // Count the sensors (2 in the design currently since the f_temp of the DHT11 is ignored)
+  // Count the sensors (1 in the design currently since the f_temp of the DHT11 is ignored)
   si_nb_sensors = sensors.getDeviceCount();
 
 #if defined(DEVMODE)
@@ -88,13 +90,6 @@ void setup()
   }
   sensors.setResolution(insideThermometer, 11);
 
-  if (!sensors.getAddress(insideThermometer, 1)) {
-#if defined(DEVMODE)
-    Serial.println(F("Unable to find address for Device 1"));
-#endif
-  }
-  sensors.setResolution(insideThermometer, 11);
-
   // breath ... there is no hurry
   delay(1000);
 }
@@ -103,9 +98,10 @@ void loop()
 {
   digitalWrite(HEAT_RELAY_PIN, RELAY_OFF);  // make sure it is off
   b_heat_relaystate = RELAY_OFF;
-
-  run_control();
-  delay(2000);
+  while (true) {
+    run_control();
+    delay(30);
+  }
 }
 
 void drawScreen(int x, int y) {
@@ -132,25 +128,48 @@ void drawScreen(int x, int y) {
   else
     display.drawString(44 + x, 40 + y, String(f_humi) + "H");
 
-  display.drawString(70 + x, 56 + y, String(t_onTime));
+  display.drawString(10 + x, 56 + y, String(f_temp2));
+  display.drawString(70 + x, 56 + y, String(i_diff));
 
 }
 
+static bool measure_environment( float *temperature, float *humidity )
+{
+  static unsigned long measurement_timestamp = millis( );
+
+  /* Measure once every four seconds. */
+  if( millis( ) - measurement_timestamp > 4000ul )
+  {
+    if( dht_sensor.measure( temperature, humidity ) == true )
+    {
+      measurement_timestamp = millis( );
+      return( true );
+    }
+  }
+
+  return( false );
+}
+
+
 void run_control()
 {
-  float temperature;
-  int diff = 0;
-  
-  if( measure_environment( &temperature, &f_humi ) == true ) {
-    temperature = getf_temperature();
-    if (temperature ==127) 
-      f_temp = -1;
-    else 
-      f_temp = temperature;
+  if (measure_environment( &f_temp, &f_humi ) == true) {
+    i_diff = abs(TargetTemperature - (f_temp * 100));
+    check_relay_state(i_diff); 
   }
-  if (f_temp != -1) {
-    diff = TargetTemperature - (f_temp * 100);
-    check_relay_state(diff); 
+
+  static unsigned long measurement_timestamp2 = millis( );
+  /* Measure once every four seconds. */
+  if( millis( ) - measurement_timestamp2 > 2000ul )
+  {
+    sensors.requestTemperatures();
+    f_temp2 = sensors.getTempC(insideThermometer);
+    if(f_temp2 == DEVICE_DISCONNECTED_C) 
+    {
+      f_temp2 = -1;
+      return;
+    }
+    measurement_timestamp2 = millis( );
   }
 
 #if defined(OLEDMODE)
@@ -164,26 +183,9 @@ void run_control()
   Serial.print(F(" f_temp: "));
   Serial.print(f_temp);
   Serial.print(F(" d_temp: "));
-  Serial.println(diff);
+  Serial.println(i_diff);
 #endif
 
-}
-
-
-float getf_temperature()
-{
-  sensors.requestTemperatures();
-  float tempC1 = sensors.requestTemperaturesByIndex(0);
-  float tempC2 = sensors.requestTemperaturesByIndex(1);
-  
-  if (abs(tempC1) == 127)
-      if (abs(tempC2) != 127)
-        return tempC2;
-  if (abs(tempC2) == 127)
-      if (abs(tempC1) != 127)
-        return tempC1;
-  
-  return abs((tempC1 + tempC2) / 2);
 }
 
 void check_relay_state(int delta)
@@ -205,21 +207,4 @@ void check_relay_state(int delta)
       digitalWrite(HEAT_RELAY_PIN, RELAY_OFF);
     }
   }
-}
-
-static bool measure_environment( float *temperature, float *humidity )
-{
-  static unsigned long measurement_timestamp = millis( );
-
-  /* Measure once every four seconds. */
-  if( millis( ) - measurement_timestamp > 1400ul )
-  {
-    if( dht_sensor.measure( temperature, humidity ) == true )
-    {
-      measurement_timestamp = millis( );
-      return( true );
-    }
-  }
-
-  return( false );
 }
