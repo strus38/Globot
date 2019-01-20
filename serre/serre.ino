@@ -1,6 +1,7 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Wire.h>
+#include <StringSplitter.h>
 
 #include "DS3231.h"
 #include "dht_nonblocking.h"
@@ -30,7 +31,8 @@
 
 #define DS18B20_PIN_1   8  // 1-wire bus
 #define DHT11_PIN       10 // DHT sensor
-#define HEAT_RELAY_PIN  6 // Channel 2
+#define HEAT_RELAY_PIN  6 // Channel 1
+#define LIGHT_RELAY_PIN 7 // Channel 2
 #define DHT_SENSOR_TYPE DHT_TYPE_11
 #define RELAY_ON        HIGH
 #define RELAY_OFF       LOW
@@ -46,12 +48,14 @@ const int TargetTemperature = 2500;       // 25.0 degree as target temp by defau
 
 unsigned long t_now;
 bool          b_heat_relaystate = RELAY_OFF;
+bool          b_light_relaystate = RELAY_OFF;
 short int     si_nb_sensors = 0;
 float         f_temp=-1;
 float         f_temp2=-1;
 float         f_humi =-1;
 int           i_led=LOW;
 int           i_diff = 0;
+String        str_now="";
 
 void setup()
 {
@@ -59,6 +63,8 @@ void setup()
    // Configure the Relays
   pinMode(HEAT_RELAY_PIN, OUTPUT);
   digitalWrite(HEAT_RELAY_PIN, RELAY_OFF);
+  pinMode(LIGHT_RELAY_PIN, OUTPUT);
+  digitalWrite(LIGHT_RELAY_PIN, RELAY_OFF);
 
 #if defined(DEVMODE)
   Serial.begin(9600);
@@ -103,7 +109,9 @@ void setup()
 void loop()
 {
   digitalWrite(HEAT_RELAY_PIN, RELAY_OFF);  // make sure it is off
+  digitalWrite(LIGHT_RELAY_PIN, RELAY_OFF);
   b_heat_relaystate = RELAY_OFF;
+  b_light_relaystate = RELAY_OFF;
   while (true) {
     run_control();
     delay(30);
@@ -117,7 +125,7 @@ void drawScreen(int x, int y) {
   display.drawString(1 + x, 1 + y, String(si_nb_sensors));
   
   display.drawString(30 + x, 1 + y,rtc.getDateStr());
-  display.drawString(30 + x, 10 + y, rtc.getTimeStr());
+  display.drawString(30 + x, 10 + y, str_now);
   
   display.drawXbm(x + 6, y + 7, temperature_width, temperature_height, temperature_bits);
   display.setFontScale2x2(true);
@@ -178,6 +186,9 @@ void run_control()
     measurement_timestamp2 = millis( );
   }
 
+  str_now = rtc.getTimeStr();
+  check_light_relay(str_now);
+
 #if defined(OLEDMODE)
   display.clear();
   display.nextFrameTick();
@@ -211,6 +222,24 @@ void check_relay_state(int delta)
     if (b_heat_relaystate == RELAY_ON) {
       b_heat_relaystate = RELAY_OFF;
       digitalWrite(HEAT_RELAY_PIN, RELAY_OFF);
+    }
+  }
+}
+
+void check_light_relay(String strTime) {
+  
+  StringSplitter *splitter = new StringSplitter(strTime, ':', 2);
+  String str_hour = splitter->getItemAtIndex(0);
+  int hour = str_hour.toInt();
+  if (hour >= 7 && hour <= 22) {
+    if (b_light_relaystate == RELAY_OFF) {
+      b_light_relaystate = RELAY_ON;
+      digitalWrite(LIGHT_RELAY_PIN, RELAY_ON);
+    }
+  } else {
+    if (b_heat_relaystate == RELAY_ON) {
+      b_light_relaystate = RELAY_OFF;
+      digitalWrite(LIGHT_RELAY_PIN, RELAY_OFF);
     }
   }
 }
