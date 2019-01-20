@@ -5,13 +5,14 @@
 Raising pepper plants from seeds to plant inside when the weather is not kind enough.
 
 The usual suspects:
-- Arduino
-- LCD screen
+- Arduino Mega
+- I2C LCD screen SSD1306
 - DHT-11
 - DS18B20
-- Relay
-- 12V Heater
-- Regulator Power 12V
+- 220V Relay
+- 220V Heater (fish tank cordon)
+- 9V power for Arduino (9V/1A)
+- I2C RTC
 
 The less frequent items:
 - Fish tank
