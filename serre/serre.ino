@@ -112,9 +112,10 @@ void loop()
   digitalWrite(LIGHT_RELAY_PIN, RELAY_OFF);
   b_heat_relaystate = RELAY_OFF;
   b_light_relaystate = RELAY_OFF;
+  
   while (true) {
     run_control();
-    delay(30);
+    delay(35);
   }
 }
 
@@ -125,7 +126,7 @@ void drawScreen(int x, int y) {
   display.drawString(1 + x, 1 + y, String(si_nb_sensors));
   
   display.drawString(30 + x, 1 + y,rtc.getDateStr());
-  display.drawString(30 + x, 10 + y, str_now);
+  display.drawString(30 + x, 10 + y, str_now = rtc.getTimeStr());
   
   display.drawXbm(x + 6, y + 7, temperature_width, temperature_height, temperature_bits);
   display.setFontScale2x2(true);
@@ -168,8 +169,11 @@ static bool measure_environment( float *temperature, float *humidity )
 void run_control()
 {
   if (measure_environment( &f_temp, &f_humi ) == true) {
+    i_led = !i_led;
+    digitalWrite(13,i_led);
     i_diff = abs(TargetTemperature - (f_temp * 100));
-    check_relay_state(i_diff); 
+    check_relay_state(i_diff);
+    check_light_relay(str_now);
   }
 
   static unsigned long measurement_timestamp2 = millis( );
@@ -186,8 +190,7 @@ void run_control()
     measurement_timestamp2 = millis( );
   }
 
-  str_now = rtc.getTimeStr();
-  check_light_relay(str_now);
+  
 
 #if defined(OLEDMODE)
   display.clear();
@@ -207,39 +210,37 @@ void run_control()
 
 void check_relay_state(int delta)
 {
-  i_led = !i_led;
-  digitalWrite(13,i_led);
-
+  
   if (delta > DELTA_T)
   {
     if (b_heat_relaystate == RELAY_OFF) {
       b_heat_relaystate = RELAY_ON;
-      digitalWrite(HEAT_RELAY_PIN, RELAY_ON);
+      digitalWrite(HEAT_RELAY_PIN, b_heat_relaystate);
     }
   }
   else
   {
     if (b_heat_relaystate == RELAY_ON) {
       b_heat_relaystate = RELAY_OFF;
-      digitalWrite(HEAT_RELAY_PIN, RELAY_OFF);
+      digitalWrite(HEAT_RELAY_PIN, b_heat_relaystate);
     }
   }
 }
 
 void check_light_relay(String strTime) {
   
-  StringSplitter *splitter = new StringSplitter(strTime, ':', 2);
+  StringSplitter *splitter = new StringSplitter(strTime, ':', 3);
   String str_hour = splitter->getItemAtIndex(0);
   int hour = str_hour.toInt();
   if (hour >= 7 && hour <= 22) {
     if (b_light_relaystate == RELAY_OFF) {
       b_light_relaystate = RELAY_ON;
-      digitalWrite(LIGHT_RELAY_PIN, RELAY_ON);
+      digitalWrite(LIGHT_RELAY_PIN, b_light_relaystate);
     }
   } else {
     if (b_light_relaystate == RELAY_ON) {
       b_light_relaystate = RELAY_OFF;
-      digitalWrite(LIGHT_RELAY_PIN, RELAY_OFF);
+      digitalWrite(LIGHT_RELAY_PIN, b_light_relaystate);
     }
   }
 }
