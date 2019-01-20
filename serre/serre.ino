@@ -2,6 +2,7 @@
 #include <DallasTemperature.h>
 #include <Wire.h>
 
+#include "DS3231.h"
 #include "dht_nonblocking.h"
 
 #ifndef DEVMODE
@@ -35,6 +36,7 @@
 #define RELAY_OFF       LOW
 #define DELTA_T         20
 
+DS3231  rtc(SDA, SCL);
 DHT_nonblocking dht_sensor( DHT11_PIN, DHT_SENSOR_TYPE );
 OneWire  oneWire(DS18B20_PIN_1);
 DallasTemperature sensors(&oneWire);
@@ -73,6 +75,10 @@ void setup()
   display.display();
 #endif
 
+  rtc.begin(); // Initialize the rtc object
+  //rtc.setDOW(SUNDAY);     // Set Day-of-Week to SUNDAY
+  //rtc.setTime(14, 0, 0);     // Set the time to 12:00:00 (24hr format)
+  //rtc.setDate(20, 1, 2019);   // Set the date to January 1st, 2014
   // Init the DS18B20 sensors
   sensors.begin();
   // Count the sensors (1 in the design currently since the f_temp of the DHT11 is ignored)
@@ -110,26 +116,26 @@ void drawScreen(int x, int y) {
   
   display.drawString(1 + x, 1 + y, String(si_nb_sensors));
   
-  if (b_heat_relaystate == RELAY_ON)
-    display.drawString(22 + x, 1 + y, F("HEAT"));
-
-  display.drawString(55 + x, 8 + y, F("RUN Mode"));
+  display.drawString(30 + x, 1 + y,rtc.getDateStr());
+  display.drawString(30 + x, 10 + y, rtc.getTimeStr());
   
-  display.drawXbm(x + 7, y + 7, temperature_width, temperature_height, temperature_bits);
+  display.drawXbm(x + 6, y + 7, temperature_width, temperature_height, temperature_bits);
   display.setFontScale2x2(true);
   if (f_temp == -1)
-    display.drawString(34 + x, 20 + y, F("Error"));
+    display.drawString(34 + x, 22 + y, F("Error"));
   else
-    display.drawString(34 + x, 20 + y, String(f_temp) + "C");
+    display.drawString(34 + x, 22 + y, String(f_temp) + "C");
 
   display.setFontScale2x2(false);
   if (f_humi ==-1)
-    display.drawString(44 + x, 40 + y, F("Error"));
+    display.drawString(44 + x, 42 + y, F("Error"));
   else
-    display.drawString(44 + x, 40 + y, String(f_humi) + "H");
+    display.drawString(44 + x, 42 + y, String(f_humi) + "H");
 
   display.drawString(10 + x, 56 + y, String(f_temp2));
   display.drawString(70 + x, 56 + y, String(i_diff));
+  if (b_heat_relaystate == RELAY_ON)
+    display.drawString(100 + x, 56 + y, F("HEAT"));
 
 }
 
