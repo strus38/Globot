@@ -1,4 +1,4 @@
-# Serre - Project for raising peppers on a secured environment
+# Serre - Project for raising peppers in a secured environment
 
 ## Overview
 
