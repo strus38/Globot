@@ -237,7 +237,7 @@ void check_light_relay(String strTime) {
       digitalWrite(LIGHT_RELAY_PIN, RELAY_ON);
     }
   } else {
-    if (b_heat_relaystate == RELAY_ON) {
+    if (b_light_relaystate == RELAY_ON) {
       b_light_relaystate = RELAY_OFF;
       digitalWrite(LIGHT_RELAY_PIN, RELAY_OFF);
     }
