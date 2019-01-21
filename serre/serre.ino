@@ -56,6 +56,8 @@ float         f_humi =-1;
 int           i_led=LOW;
 int           i_diff = 0;
 String        str_now="";
+StringSplitter *splitter;
+String        str_hour = "";
 
 void setup()
 {
@@ -229,8 +231,8 @@ void check_relay_state(int delta)
 
 void check_light_relay(String strTime) {
   
-  StringSplitter *splitter = new StringSplitter(strTime, ':', 3);
-  String str_hour = splitter->getItemAtIndex(0);
+  splitter = new StringSplitter(strTime, ':', 3);
+  str_hour = splitter->getItemAtIndex(0);
   int hour = str_hour.toInt();
   if (hour >= 7 && hour <= 22) {
     if (b_light_relaystate == RELAY_OFF) {
