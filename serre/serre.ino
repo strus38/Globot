@@ -1,9 +1,9 @@
+#include <DHT.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
 //#include "MemoryFree.h"
 #include "DS3231.h"
-#include "dht_nonblocking.h"
 
 #ifndef DEVMODE
 #define DEVMODE 0
@@ -33,23 +33,22 @@
 #endif
 
 #define DS18B20_PIN_1   8  // 1-wire bus
-#define DHT11_PIN       10 // DHT sensor
+#define DHTPIN       10 // DHT sensor
 #define HEAT_RELAY_PIN  6 // Channel 1
 #define LIGHT_RELAY_PIN 7 // Channel 2
-#define DHT_SENSOR_TYPE DHT_TYPE_11
+#define DHTTYPE DHT11
 #define RELAY_ON        HIGH
 #define RELAY_OFF       LOW
-#define DELTA_T         20
+#define DELTA_T         100
 
 DS3231  rtc;
-DHT_nonblocking dht_sensor( DHT11_PIN, DHT_SENSOR_TYPE );
+DHT dht(DHTPIN, DHTTYPE);
 OneWire  oneWire(DS18B20_PIN_1);
 DallasTemperature sensors(&oneWire);
 DeviceAddress insideThermometer;
 RTCDateTime dt;
 
-const int     TargetTemperature = 2400;       // 25.0 degree as target temp by default
-
+const int     TargetTemperature = 2400;
 unsigned long t_now;
 bool          b_heat_relaystate = RELAY_OFF;
 bool          b_light_relaystate = RELAY_OFF;
@@ -115,39 +114,28 @@ void loop()
   while (true) {
     //Serial.println(freeMemory());
     run_control();
-    delay(35);
+    delay(500);
   }
 }
-
-static bool measure_environment( float *temperature, float *humidity )
-{
-  static unsigned long measurement_timestamp = millis( );
-
-  /* Measure once every four seconds. */
-  if( millis( ) - measurement_timestamp > 4000ul )
-  {
-    if( dht_sensor.measure( temperature, humidity ) == true )
-    {
-      measurement_timestamp = millis( );
-      return( true );
-    }
-  }
-  return( false );
-}
-
 
 void run_control()
 {
   dt = rtc.getDateTime();
-  
-  if (measure_environment( &f_temp, &f_humi ) == true) {
+
+  static unsigned long measurement_timestamp = millis( );
+  /* Measure once every four seconds. */
+  if( millis( ) - measurement_timestamp > 4000ul )
+  {
     digitalWrite(LED_BUILTIN, HIGH);
-    i_diff = abs(TargetTemperature - (f_temp * 100));
-    check_relay_state(i_diff);
-    check_light_relay(dt.hour);
-    delay(500);
+    f_temp = dht.readTemperature();
+    f_humi = dht.readHumidity();
+    if (isnan(f_temp) || isnan(f_humi)) {
+      Serial.println(F("Failed to read from DHT sensor!"));
+      return;
+    }
+    measurement_timestamp = millis( );
+    digitalWrite(LED_BUILTIN, LOW);
   }
-  digitalWrite(LED_BUILTIN, LOW);
     
   static unsigned long measurement_timestamp2 = millis( );
   /* Measure once every four seconds. */
@@ -159,12 +147,16 @@ void run_control()
     {
       f_temp2 = -1;
       return;
+    } else {
+      i_diff = abs(TargetTemperature - (f_temp2 * 100));
     }
     measurement_timestamp2 = millis( );
   }
+  check_relay_state(i_diff);
+  check_light_relay(dt.hour);
   
   char temp_buff[6]; char hum_buff[6];
-  dtostrf(f_temp,5,1,temp_buff);
+  dtostrf(f_temp2,5,1,temp_buff);
   dtostrf(f_humi,5,1,hum_buff);
 
 #if defined(OLEDMODE)
@@ -203,8 +195,8 @@ void run_control()
   display.print(F(" - "));
   display.print(si_nb_sensors);
   display.print(F(" - "));
-  dtostrf(f_temp2,5,1,temp_buff);
-  display.print(f_temp2);
+  dtostrf(f_temp,5,1,temp_buff);
+  display.print(f_temp);
   display.print(F("C"));
   display.display();
 #endif
