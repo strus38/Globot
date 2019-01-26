@@ -1,8 +1,7 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <Wire.h>
-#include <StringSplitter.h>
 
+//#include "MemoryFree.h"
 #include "DS3231.h"
 #include "dht_nonblocking.h"
 
@@ -14,19 +13,23 @@
 #define OLEDMODE 1
 #endif
 
+
 #if defined(OLEDMODE)
-    #include "ssd1306_i2c.h"
-    #include "font.h"
-    #include "serre.h"
+    #include <Adafruit_GFX.h>
+    #include <Adafruit_SSD1306.h>
+
+    //#include "font.h"
+    //#include "serre.h"
 
     #define SDA 20
     #define SCL 21
     #define I2C 0x3C
-    SSD1306 display(I2C, SDA, SCL);
-    void drawScreen(int x, int y);
-    void (*frameCallbacks[1])(int x, int y) = {drawScreen};
-    int frameCount = 1;
-    int currentFrame = 0;
+    #define SCREEN_WIDTH 128 // OLED display width, in pixels
+    #define SCREEN_HEIGHT 64 // OLED display height, in pixels
+    
+    // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+    #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
+    Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 
 #define DS18B20_PIN_1   8  // 1-wire bus
@@ -38,13 +41,14 @@
 #define RELAY_OFF       LOW
 #define DELTA_T         20
 
-DS3231  rtc(SDA, SCL);
+DS3231  rtc;
 DHT_nonblocking dht_sensor( DHT11_PIN, DHT_SENSOR_TYPE );
 OneWire  oneWire(DS18B20_PIN_1);
 DallasTemperature sensors(&oneWire);
 DeviceAddress insideThermometer;
+RTCDateTime dt;
 
-const int TargetTemperature = 2500;       // 25.0 degree as target temp by default
+const int     TargetTemperature = 2400;       // 25.0 degree as target temp by default
 
 unsigned long t_now;
 bool          b_heat_relaystate = RELAY_OFF;
@@ -53,11 +57,7 @@ short int     si_nb_sensors = 0;
 float         f_temp=-1;
 float         f_temp2=-1;
 float         f_humi =-1;
-int           i_led=LOW;
 int           i_diff = 0;
-String        str_now="";
-StringSplitter *splitter;
-String        str_hour = "";
 
 void setup()
 {
@@ -68,19 +68,16 @@ void setup()
   pinMode(LIGHT_RELAY_PIN, OUTPUT);
   digitalWrite(LIGHT_RELAY_PIN, RELAY_OFF);
 
+  pinMode(LED_BUILTIN, OUTPUT);
+  
 #if defined(DEVMODE)
   Serial.begin(9600);
 #endif
 #if defined(OLEDMODE)
-  display.init();
-  display.flipScreenVertically();
-  // set the drawing functions
-  display.setFrameCallbacks(1, frameCallbacks);
-  // how many ticks does a slide of frame take?
-  display.setFrameTransitionTicks(10);
-
-  display.clear();
-  display.display();
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
 #endif
 
   rtc.begin(); // Initialize the rtc object
@@ -116,38 +113,10 @@ void loop()
   b_light_relaystate = RELAY_OFF;
   
   while (true) {
+    //Serial.println(freeMemory());
     run_control();
     delay(35);
   }
-}
-
-void drawScreen(int x, int y) {
-  
-  display.setFontScale2x2(false);
-  
-  display.drawString(1 + x, 1 + y, String(si_nb_sensors));
-  
-  display.drawString(30 + x, 1 + y,rtc.getDateStr());
-  display.drawString(30 + x, 10 + y, str_now = rtc.getTimeStr());
-  
-  display.drawXbm(x + 6, y + 7, temperature_width, temperature_height, temperature_bits);
-  display.setFontScale2x2(true);
-  if (f_temp == -1)
-    display.drawString(34 + x, 22 + y, F("Error"));
-  else
-    display.drawString(34 + x, 22 + y, String(f_temp) + "C");
-
-  display.setFontScale2x2(false);
-  if (f_humi ==-1)
-    display.drawString(44 + x, 42 + y, F("Error"));
-  else
-    display.drawString(44 + x, 42 + y, String(f_humi) + "H");
-
-  display.drawString(10 + x, 56 + y, String(f_temp2));
-  display.drawString(70 + x, 56 + y, String(i_diff));
-  if (b_heat_relaystate == RELAY_ON)
-    display.drawString(100 + x, 56 + y, F("HEAT"));
-
 }
 
 static bool measure_environment( float *temperature, float *humidity )
@@ -163,21 +132,23 @@ static bool measure_environment( float *temperature, float *humidity )
       return( true );
     }
   }
-
   return( false );
 }
 
 
 void run_control()
 {
+  dt = rtc.getDateTime();
+  
   if (measure_environment( &f_temp, &f_humi ) == true) {
-    i_led = !i_led;
-    digitalWrite(13,i_led);
+    digitalWrite(LED_BUILTIN, HIGH);
     i_diff = abs(TargetTemperature - (f_temp * 100));
     check_relay_state(i_diff);
-    check_light_relay(str_now);
+    check_light_relay(dt.hour);
+    delay(500);
   }
-
+  digitalWrite(LED_BUILTIN, LOW);
+    
   static unsigned long measurement_timestamp2 = millis( );
   /* Measure once every four seconds. */
   if( millis( ) - measurement_timestamp2 > 2000ul )
@@ -191,12 +162,50 @@ void run_control()
     }
     measurement_timestamp2 = millis( );
   }
-
   
+  char temp_buff[6]; char hum_buff[6];
+  dtostrf(f_temp,5,1,temp_buff);
+  dtostrf(f_humi,5,1,hum_buff);
 
 #if defined(OLEDMODE)
-  display.clear();
-  display.nextFrameTick();
+  display.clearDisplay();
+  display.setCursor(1,1);
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  // Display date/time
+  display.print(dt.day);
+  display.print(F("/"));
+  display.print(dt.month);
+  display.print(F("/"));
+  display.print(dt.year);
+  display.setCursor(65,1);
+  display.print(dt.hour); //text todisplay
+  display.print(F(":"));
+  display.print(dt.minute);
+  float f=(rtc.readTemperature());
+  display.setCursor(105,1);
+  display.print(f,0);
+  display.println(F("C"));
+  display.println(F(""));
+  // Display Temp/Hum
+  display.setTextSize(2);
+  display.print( "T: " );
+  display.print(temp_buff);
+  display.println(F("C"));
+  display.print( "H:" );
+  display.print(hum_buff);
+  display.println(F("%"));
+  // Display delta
+  display.setTextSize(1);
+  display.println(F(""));
+  display.print(F("Delta: "));
+  display.print(i_diff);
+  display.print(F(" - "));
+  display.print(si_nb_sensors);
+  display.print(F(" - "));
+  dtostrf(f_temp2,5,1,temp_buff);
+  display.print(f_temp2);
+  display.print(F("C"));
   display.display();
 #endif
 #if defined(DEVMODE)
@@ -229,11 +238,8 @@ void check_relay_state(int delta)
   }
 }
 
-void check_light_relay(String strTime) {
+void check_light_relay(int hour) {
   
-  splitter = new StringSplitter(strTime, ':', 3);
-  str_hour = splitter->getItemAtIndex(0);
-  int hour = str_hour.toInt();
   if (hour >= 7 && hour <= 22) {
     if (b_light_relaystate == RELAY_OFF) {
       b_light_relaystate = RELAY_ON;
