@@ -148,7 +148,7 @@ void run_control()
       f_temp2 = -1;
       return;
     } else {
-      i_diff = abs(TargetTemperature - (f_temp2 * 100));
+      i_diff = TargetTemperature - (f_temp2 * 100);
     }
     measurement_timestamp2 = millis( );
   }
