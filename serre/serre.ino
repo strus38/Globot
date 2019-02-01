@@ -48,8 +48,7 @@ DallasTemperature sensors(&oneWire);
 DeviceAddress insideThermometer;
 RTCDateTime dt;
 
-const int     TargetTemperature = 2400;
-unsigned long t_now;
+const int     TargetTemperature = 2500;
 bool          b_heat_relaystate = RELAY_OFF;
 bool          b_light_relaystate = RELAY_OFF;
 short int     si_nb_sensors = 0;
@@ -60,6 +59,7 @@ int           i_diff = 0;
 char temp_buff[6]; 
 char hum_buff[6];
 float f=-1;
+boolean b = true;
 
 void setup()
 {
@@ -175,18 +175,33 @@ void run_control()
   display.println(F("C"));
   display.print( "H:" );
   display.print(hum_buff);
-  display.println(F("%"));
-  // Display delta
+  display.print(F("%"));
   display.setTextSize(1);
+  display.print(F("  "));
+  // Display delta
+  if (b_light_relaystate == RELAY_ON) {
+    display.print(F("L"));
+  }
+  if (b_heat_relaystate == RELAY_ON) {
+    display.print(F("H"));
+  }
   display.println(F(""));
-  display.print(F("Delta: "));
+  display.println(F(""));
+  display.println(F(""));
+  display.print(F("Delta:"));
   display.print(i_diff);
-  display.print(F(" - "));
+  display.print(F("-"));
   display.print(si_nb_sensors);
-  display.print(F(" - "));
+  display.print(F("-"));
   dtostrf(f_temp,5,1,temp_buff);
   display.print(f_temp);
   display.print(F("C"));
+  b = !b;
+  if (b==true){
+    display.print(F(".."));
+  } else {
+    display.print(F(""));
+  }
   display.display();
 #endif
 #if defined(DEVMODE)
@@ -221,7 +236,7 @@ void check_relay_state(int delta)
 
 void check_light_relay(int hour) {
   
-  if (hour >= 7 && hour <= 22) {
+  if (hour >= 7 && hour < 22) {
     if (b_light_relaystate == RELAY_OFF) {
       b_light_relaystate = RELAY_ON;
       digitalWrite(LIGHT_RELAY_PIN, b_light_relaystate);
