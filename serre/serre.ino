@@ -25,7 +25,7 @@
     #define SCL 21
     #define I2C 0x3C
     #define SCREEN_WIDTH 128 // OLED display width, in pixels
-    #define SCREEN_HEIGHT 64 // OLED display height, in pixels
+    #define SCREEN_HEIGHT 64 // OLED display height, in pixels@@@@@@@@@@@@@@@@@@@@
     
     // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
     #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
@@ -57,6 +57,9 @@ float         f_temp=-1;
 float         f_temp2=-1;
 float         f_humi =-1;
 int           i_diff = 0;
+char temp_buff[6]; 
+char hum_buff[6];
+float f=-1;
 
 void setup()
 {
@@ -114,50 +117,36 @@ void loop()
   while (true) {
     //Serial.println(freeMemory());
     run_control();
-    delay(500);
+    delay(4000);
   }
 }
 
 void run_control()
 {
   dt = rtc.getDateTime();
+  /* Measure once every four seconds. */
 
-  static unsigned long measurement_timestamp = millis( );
-  /* Measure once every four seconds. */
-  if( millis( ) - measurement_timestamp > 4000ul )
-  {
-    digitalWrite(LED_BUILTIN, HIGH);
-    f_temp = dht.readTemperature();
-    f_humi = dht.readHumidity();
-    if (isnan(f_temp) || isnan(f_humi)) {
-      Serial.println(F("Failed to read from DHT sensor!"));
-      return;
-    }
-    measurement_timestamp = millis( );
-    digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(LED_BUILTIN, HIGH);
+  f_temp = dht.readTemperature();
+  f_humi = dht.readHumidity();
+  if (isnan(f_temp) || isnan(f_humi)) {
+    Serial.println(F("Failed to read from DHT sensor!"));
+    return;
   }
-    
-  static unsigned long measurement_timestamp2 = millis( );
-  /* Measure once every four seconds. */
-  if( millis( ) - measurement_timestamp2 > 2000ul )
+  sensors.requestTemperatures();
+  f_temp2 = sensors.getTempC(insideThermometer);
+  if(f_temp2 == DEVICE_DISCONNECTED_C) 
   {
-    sensors.requestTemperatures();
-    f_temp2 = sensors.getTempC(insideThermometer);
-    if(f_temp2 == DEVICE_DISCONNECTED_C) 
-    {
-      f_temp2 = -1;
-      return;
-    } else {
-      i_diff = TargetTemperature - (f_temp2 * 100);
-    }
-    measurement_timestamp2 = millis( );
+    f_temp2 = -1;
+    return;
+  } else {
+    i_diff = TargetTemperature - (f_temp2 * 100);
   }
-  check_relay_state(i_diff);
-  check_light_relay(dt.hour);
-  
-  char temp_buff[6]; char hum_buff[6];
   dtostrf(f_temp2,5,1,temp_buff);
   dtostrf(f_humi,5,1,hum_buff);
+  check_relay_state(i_diff);
+  check_light_relay(dt.hour);
+  digitalWrite(LED_BUILTIN, LOW);
 
 #if defined(OLEDMODE)
   display.clearDisplay();
@@ -174,7 +163,7 @@ void run_control()
   display.print(dt.hour); //text todisplay
   display.print(F(":"));
   display.print(dt.minute);
-  float f=(rtc.readTemperature());
+  f=(rtc.readTemperature());
   display.setCursor(105,1);
   display.print(f,0);
   display.println(F("C"));
