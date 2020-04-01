@@ -1,3 +1,0 @@
-# Using PID library
-
-Note: this code is not working yet...

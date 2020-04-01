@@ -1,17 +1,23 @@
-#AUTOMATED EGG INCUBATOR
+# 2018 incubator setup
 
-This is a fully automated egg incubator based on Arduino.
+## Hardware
 
-It basically measure:
-- Temperature
-- Humidity
+- Wood box
+- Raspberry Pi
+- Heater
+- Humidifier
+- Some electrical pieces
+- Echo Dot
 
-It pilots 2 relays:
-- Lamp to heat the eggs
-- A motor to roll the eggs every 3 hours.
+## Software
+- InfluxDB (optional)
+- Custom scripts
+- Grafana (Optional)
+- Alexa custom skills (Optional)
 
-It displays the information on a lovely tiny OLED screen!
-
-![alt tag](./Couveuse1.jpg)
-![alt tag](./Couveuse2.jpg)
-![alt tag](./Couveuse3.jpg)
+## Installation
+- Wire the Raspberry Pi
+- Power on the RPi
+- Upload the code
+- Update the config.conf file to match your parameters
+- Reboot

@@ -1,4 +1,0 @@
-requests
-Adafruit_DHT
-RPi.GPIO as GPIO
-ConfigParser
